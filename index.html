@@ -9,36 +9,25 @@
 <body>
     <div class="app">
         <h1>AI Stock Analyzer</h1>
-        <p class="subtitle">AI-powered technical analysis with real indicator data</p>
+        <p class="subtitle">Real-time technical analysis powered by AI</p>
 
         <div class="input-section">
-            <div class="input-row">
-                <div class="input-group">
-                    <label>Stock Symbol</label>
-                    <input type="text" id="symbol" placeholder="e.g. THYAO.IS, AAPL, TSLA">
-                </div>
-                <div class="input-group">
-                    <label>Market</label>
-                    <select id="market">
-                        <option value="BIST">BIST (Istanbul)</option>
-                        <option value="US">US (NYSE/NASDAQ)</option>
-                        <option value="EU">Europe</option>
-                        <option value="CRYPTO">Crypto</option>
-                    </select>
+            <div class="notice">Currently available for THYAO (Turkish Airlines) with live data. More stocks coming soon.</div>
+
+            <div class="api-key-box">
+                <label>Groq API Key <span class="key-status" id="groqStatus">Not set</span></label>
+                <div class="key-row">
+                    <input type="password" id="groqKeyInput" placeholder="Groq key (console.groq.com)">
+                    <button class="key-save" id="groqSaveBtn">Save</button>
                 </div>
             </div>
 
-            <div class="popular-stocks" id="popularStocks">
-                <span class="stock-tag" onclick="setSymbol('THYAO.IS')">THYAO</span>
-                <span class="stock-tag" onclick="setSymbol('SISE.IS')">SISE</span>
-                <span class="stock-tag" onclick="setSymbol('GARAN.IS')">GARAN</span>
-                <span class="stock-tag" onclick="setSymbol('ASELS.IS')">ASELS</span>
-                <span class="stock-tag" onclick="setSymbol('TUPRS.IS')">TUPRS</span>
-                <span class="stock-tag" onclick="setSymbol('KCHOL.IS')">KCHOL</span>
-                <span class="stock-tag" onclick="setSymbol('AAPL')">AAPL</span>
-                <span class="stock-tag" onclick="setSymbol('TSLA')">TSLA</span>
-                <span class="stock-tag" onclick="setSymbol('MSFT')">MSFT</span>
-                <span class="stock-tag" onclick="setSymbol('BTC-USD')">BTC</span>
+            <div class="api-key-box">
+                <label>Twelve Data API Key <span class="key-status" id="twStatus">Not set</span></label>
+                <div class="key-row">
+                    <input type="password" id="twKeyInput" placeholder="Twelve Data key (twelvedata.com)">
+                    <button class="key-save" id="twSaveBtn">Save</button>
+                </div>
             </div>
 
             <div class="input-row">
@@ -59,43 +48,36 @@
                     </select>
                 </div>
             </div>
-
-            <button class="analyze-btn" id="analyzeBtn">Analyze Stock</button>
+            <button class="analyze-btn" id="analyzeBtn">Analyze THYAO</button>
         </div>
 
         <div class="loading" id="loading" style="display:none;">
             <div class="spinner"></div>
-            <span>Analyzing stock data...</span>
+            <span id="loadingText">Fetching data...</span>
         </div>
 
         <div class="error-msg" id="errorMsg" style="display:none;"></div>
 
         <div class="result-section" id="resultSection" style="display:none;">
-            <div class="signal-header" id="signalHeader">
+            <div class="signal-header">
                 <div class="signal-badge" id="signalBadge">HOLD</div>
                 <div class="signal-info">
                     <div class="stock-name" id="stockName"></div>
                     <div class="stock-price" id="stockPrice"></div>
                 </div>
-                <div class="confidence" id="confidence">
+                <div class="confidence">
                     <span class="conf-label">Confidence</span>
                     <span class="conf-value" id="confValue">0%</span>
                 </div>
             </div>
-
             <div class="indicators-grid" id="indicatorsGrid"></div>
-
             <div class="analysis-tabs">
                 <button class="tab active" data-tab="short" onclick="switchTab('short')">Short Term</button>
                 <button class="tab" data-tab="medium" onclick="switchTab('medium')">Medium Term</button>
                 <button class="tab" data-tab="long" onclick="switchTab('long')">Long Term</button>
             </div>
-
             <div class="analysis-content" id="analysisContent"></div>
-
-            <div class="disclaimer">
-                This is AI-generated analysis for educational purposes only. Not financial advice. Always do your own research before investing.
-            </div>
+            <div class="disclaimer">AI-generated analysis for educational purposes only. Not financial advice.</div>
         </div>
     </div>
     <script src="script.js"></script>

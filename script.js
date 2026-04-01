@@ -1,11 +1,9 @@
-const API_KEY = 'AIzaSyD4Rj6ykae16mVqklxSl37GArtSV_D-i1s';
+let GROQ_KEY = localStorage.getItem('groq_key') || '';
+let TW_KEY = localStorage.getItem('tw_key') || '';
 
-const symbolInput = document.getElementById('symbol');
-const marketSelect = document.getElementById('market');
-const horizonSelect = document.getElementById('horizon');
-const riskSelect = document.getElementById('risk');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const loading = document.getElementById('loading');
+const loadingText = document.getElementById('loadingText');
 const errorMsg = document.getElementById('errorMsg');
 const resultSection = document.getElementById('resultSection');
 const signalBadge = document.getElementById('signalBadge');
@@ -14,27 +12,35 @@ const stockPrice = document.getElementById('stockPrice');
 const confValue = document.getElementById('confValue');
 const indicatorsGrid = document.getElementById('indicatorsGrid');
 const analysisContent = document.getElementById('analysisContent');
+const horizonSelect = document.getElementById('horizon');
+const riskSelect = document.getElementById('risk');
+
+const groqInput = document.getElementById('groqKeyInput');
+const groqSaveBtn = document.getElementById('groqSaveBtn');
+const groqStatus = document.getElementById('groqStatus');
+const twInput = document.getElementById('twKeyInput');
+const twSaveBtn = document.getElementById('twSaveBtn');
+const twStatus = document.getElementById('twStatus');
 
 let fullAnalysis = {};
 
-function setSymbol(sym) {
-    symbolInput.value = sym;
-    if (sym.includes('.IS')) {
-        marketSelect.value = 'BIST';
-    } else if (sym.includes('-USD')) {
-        marketSelect.value = 'CRYPTO';
-    } else {
-        marketSelect.value = 'US';
-    }
-}
+// Key management
+if (GROQ_KEY) { groqInput.value = '••••••••••'; groqStatus.textContent = 'Saved'; groqStatus.style.color = '#27ae60'; }
+if (TW_KEY) { twInput.value = '••••••••••'; twStatus.textContent = 'Saved'; twStatus.style.color = '#27ae60'; }
+
+groqSaveBtn.addEventListener('click', () => {
+    const k = groqInput.value.trim();
+    if (k && !k.includes('•')) { GROQ_KEY = k; localStorage.setItem('groq_key', k); groqInput.value = '••••••••••'; groqStatus.textContent = 'Saved'; groqStatus.style.color = '#27ae60'; }
+});
+twSaveBtn.addEventListener('click', () => {
+    const k = twInput.value.trim();
+    if (k && !k.includes('•')) { TW_KEY = k; localStorage.setItem('tw_key', k); twInput.value = '••••••••••'; twStatus.textContent = 'Saved'; twStatus.style.color = '#27ae60'; }
+});
 
 function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
-    
-    if (fullAnalysis[tab]) {
-        renderAnalysis(fullAnalysis[tab]);
-    }
+    if (fullAnalysis[tab]) renderAnalysis(fullAnalysis[tab]);
 }
 
 function renderAnalysis(text) {
@@ -47,207 +53,196 @@ function renderAnalysis(text) {
     analysisContent.innerHTML = html;
 }
 
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function fetchTW(endpoint, extra) {
+    const url = `https://api.twelvedata.com/${endpoint}?symbol=THYAO&country=Turkey&interval=1day&outputsize=1&apikey=${TW_KEY}${extra || ''}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 429) { await wait(8000); const retry = await fetch(url); return await retry.json(); }
+    return data;
+}
+
+function getVal(data, key) {
+    try { return parseFloat(data.values[0][key]).toFixed(2); } catch(e) { return 'N/A'; }
+}
+
 async function analyze() {
-    let symbol = symbolInput.value.trim().toUpperCase();
-    if (!symbol) return;
-
-    const market = marketSelect.value;
-    const horizon = horizonSelect.value;
-    const risk = riskSelect.value;
-
-    if (market === 'BIST' && !symbol.includes('.IS')) {
-        symbol += '.IS';
-    }
+    if (!GROQ_KEY) { errorMsg.textContent = 'Please enter your Groq API key.'; errorMsg.style.display = 'block'; return; }
+    if (!TW_KEY) { errorMsg.textContent = 'Please enter your Twelve Data API key.'; errorMsg.style.display = 'block'; return; }
 
     analyzeBtn.disabled = true;
-    analyzeBtn.textContent = 'Analyzing...';
     errorMsg.style.display = 'none';
     resultSection.style.display = 'none';
     loading.style.display = 'flex';
 
-    const horizonText = { short: 'Short term (1-7 days)', medium: 'Medium term (1-3 months)', long: 'Long term (6+ months)' };
-    const riskText = { low: 'Low risk tolerance', medium: 'Medium risk tolerance', high: 'High risk tolerance' };
+    try {
+        loadingText.textContent = 'Fetching THYAO price...';
+        const quote = await fetchTW('quote');
+        if (quote.code || quote.status === 'error') throw new Error('Could not fetch THYAO. Check Twelve Data key or try again.');
 
-    const prompt = `You are an expert financial analyst and technical trader. Analyze the stock "${symbol}" for trading.
+        loadingText.textContent = 'Fetching RSI...';
+        await wait(1500);
+        const rsi = await fetchTW('rsi');
 
-The investor profile:
-- Investment horizon: ${horizonText[horizon]}
-- Risk tolerance: ${riskText[risk]}
+        loadingText.textContent = 'Fetching MACD...';
+        await wait(1500);
+        const macd = await fetchTW('macd');
 
-Provide a comprehensive analysis using these technical indicators. Give realistic estimated values:
+        loadingText.textContent = 'Fetching Bollinger Bands...';
+        await wait(1500);
+        const bb = await fetchTW('bbands');
 
-1. RSI (14-period) - value and interpretation
-2. MACD - signal line crossover status
-3. Bollinger Bands - current position (upper/middle/lower)
-4. SMA 20 & SMA 50 - crossover status
-5. EMA 12 & EMA 26 - trend direction
-6. ADX - trend strength value
-7. Stochastic RSI - overbought/oversold
-8. Volume - relative to average
+        loadingText.textContent = 'Fetching SMA...';
+        await wait(1500);
+        const sma20 = await fetchTW('sma', '&time_period=20');
+        await wait(1500);
+        const sma50 = await fetchTW('sma', '&time_period=50');
 
-Respond in this EXACT format:
+        loadingText.textContent = 'Fetching EMA...';
+        await wait(1500);
+        const ema12 = await fetchTW('ema', '&time_period=12');
+        await wait(1500);
+        const ema26 = await fetchTW('ema', '&time_period=26');
+
+        loadingText.textContent = 'Fetching ADX & StochRSI...';
+        await wait(1500);
+        const adx = await fetchTW('adx');
+        await wait(1500);
+        const stoch = await fetchTW('stochrsi');
+
+        const price = parseFloat(quote.close).toFixed(2);
+        const change = parseFloat(quote.percent_change).toFixed(2);
+        const vol = quote.volume;
+        const h52 = quote.fifty_two_week ? quote.fifty_two_week.high : 'N/A';
+        const l52 = quote.fifty_two_week ? quote.fifty_two_week.low : 'N/A';
+
+        const ind = {
+            rsi: getVal(rsi, 'rsi'), macd: getVal(macd, 'macd'), macdSig: getVal(macd, 'macd_signal'),
+            bbU: getVal(bb, 'upper_band'), bbM: getVal(bb, 'middle_band'), bbL: getVal(bb, 'lower_band'),
+            sma20: getVal(sma20, 'sma'), sma50: getVal(sma50, 'sma'),
+            ema12: getVal(ema12, 'ema'), ema26: getVal(ema26, 'ema'),
+            adx: getVal(adx, 'adx'), stochK: getVal(stoch, 'fast_k')
+        };
+
+        loadingText.textContent = 'AI analyzing...';
+
+        const horizon = horizonSelect.value;
+        const risk = riskSelect.value;
+        const hT = { short: 'Short (1-7 days)', medium: 'Medium (1-3 months)', long: 'Long (6+ months)' };
+        const rT = { low: 'Low', medium: 'Medium', high: 'High' };
+
+        const prompt = `Expert analyst. REAL LIVE DATA for Turkish Airlines (THYAO) BIST:
+
+Price: ${price} TRY (${change}%) | Vol: ${vol} | 52W: ${l52}-${h52}
+RSI: ${ind.rsi} | MACD: ${ind.macd} (Sig: ${ind.macdSig})
+BB: ${ind.bbL}/${ind.bbM}/${ind.bbU}
+SMA20: ${ind.sma20} SMA50: ${ind.sma50} | EMA12: ${ind.ema12} EMA26: ${ind.ema26}
+ADX: ${ind.adx} | StochRSI: ${ind.stochK}
+
+Investor: ${hT[horizon]}, ${rT[risk]} risk
+
+EXACT format:
 
 SIGNAL: [BUY/SELL/HOLD]
-CONFIDENCE: [number 0-100]
-STOCK_NAME: [full company name]
-CURRENT_PRICE: [estimated current price with currency]
+CONFIDENCE: [0-100]
 
 INDICATORS:
-RSI: [value] | [Bullish/Bearish/Neutral]
-MACD: [status] | [Bullish/Bearish/Neutral]
-BOLLINGER: [position] | [Bullish/Bearish/Neutral]
-SMA: [crossover status] | [Bullish/Bearish/Neutral]
-EMA: [trend] | [Bullish/Bearish/Neutral]
-ADX: [value] | [Bullish/Bearish/Neutral]
-STOCH_RSI: [value] | [Bullish/Bearish/Neutral]
-VOLUME: [status] | [Bullish/Bearish/Neutral]
+RSI: ${ind.rsi} | [Bullish/Bearish/Neutral]
+MACD: ${ind.macd} | [Bullish/Bearish/Neutral]
+BOLLINGER: ${price} vs ${ind.bbL}-${ind.bbU} | [Bullish/Bearish/Neutral]
+SMA: 20:${ind.sma20} 50:${ind.sma50} | [Bullish/Bearish/Neutral]
+EMA: 12:${ind.ema12} 26:${ind.ema26} | [Bullish/Bearish/Neutral]
+ADX: ${ind.adx} | [Bullish/Bearish/Neutral]
+STOCH_RSI: ${ind.stochK} | [Bullish/Bearish/Neutral]
+VOLUME: ${vol} | [Bullish/Bearish/Neutral]
 
 SHORT_TERM:
 ### Signal: [Buy/Sell/Hold]
 ### Key Levels
-- Support: [price level]
-- Resistance: [price level]
-- Stop Loss: [price level]
+- Support: [level]
+- Resistance: [level]
+- Stop Loss: [level]
 ### Analysis
-- [detailed point about short term outlook]
-- [point about momentum]
-- [point about entry/exit]
+- [point]
+- [point]
 
 MEDIUM_TERM:
 ### Signal: [Buy/Sell/Hold]
 ### Key Levels
-- Support: [price level]
-- Resistance: [price level]
-- Target Price: [price level]
+- Target: [level]
 ### Analysis
-- [detailed point about medium term trend]
-- [point about fundamentals]
-- [point about sector outlook]
+- [point]
+- [point]
 
 LONG_TERM:
 ### Signal: [Buy/Sell/Hold]
-### Key Levels
-- Fair Value: [estimated price]
-- Target (12 months): [price level]
 ### Analysis
-- [detailed point about long term potential]
-- [point about growth drivers]
-- [point about risks]
+- [point]
+- [point]
 
-Be specific with numbers and realistic with your analysis. Use actual market knowledge.`;
+Real numbers only. Concise.`;
 
-   const models = [
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash'
-];
+        const aiRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_KEY },
+            body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 2000 })
+        });
+        const aiData = await aiRes.json();
+        if (aiData.error) throw new Error(aiData.error.message);
 
-    let responseText = null;
-    let lastError = '';
+        const text = aiData.choices[0].message.content;
+        const sig = text.match(/SIGNAL:\s*(BUY|SELL|HOLD)/i);
+        const conf = text.match(/CONFIDENCE:\s*(\d+)/);
 
-    for (const model of models) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
-                })
+        signalBadge.textContent = sig ? sig[1].toUpperCase() : 'HOLD';
+        signalBadge.className = 'signal-badge signal-' + (sig ? sig[1].toLowerCase() : 'hold');
+        stockName.textContent = 'Turkish Airlines (THYAO)';
+        stockPrice.textContent = price + ' TRY (' + change + '%)';
+        confValue.textContent = (conf ? conf[1] : '50') + '%';
+
+        const indSec = text.match(/INDICATORS:\n([\s\S]*?)(?=SHORT_TERM:)/);
+        indicatorsGrid.innerHTML = '';
+        if (indSec) {
+            indSec[1].trim().split('\n').filter(l => l.includes('|')).forEach(line => {
+                const p = line.split('|');
+                const nv = p[0].split(':');
+                const n = nv[0].trim();
+                const v = nv.slice(1).join(':').trim();
+                const s = p[1] ? p[1].trim() : 'Neutral';
+                let cl = 'ind-neutral';
+                if (s.toLowerCase().includes('bullish')) cl = 'ind-bullish';
+                if (s.toLowerCase().includes('bearish')) cl = 'ind-bearish';
+                const d = document.createElement('div');
+                d.className = 'indicator';
+                d.innerHTML = `<div class="ind-name">${n}</div><div class="ind-value">${v}</div><div class="ind-signal ${cl}">${s}</div>`;
+                indicatorsGrid.appendChild(d);
             });
-            const data = await res.json();
-            if (!data.error && data.candidates && data.candidates[0]) {
-                responseText = data.candidates[0].content.parts[0].text;
-                break;
-            } else {
-                lastError = data.error ? data.error.message : 'No response';
-            }
-        } catch (err) {
-            lastError = err.message;
         }
+
+        const sM = text.match(/SHORT_TERM:\n([\s\S]*?)(?=MEDIUM_TERM:)/);
+        const mM = text.match(/MEDIUM_TERM:\n([\s\S]*?)(?=LONG_TERM:)/);
+        const lM = text.match(/LONG_TERM:\n([\s\S]*?)$/);
+
+        fullAnalysis = {
+            short: sM ? sM[1].trim() : 'No analysis.',
+            medium: mM ? mM[1].trim() : 'No analysis.',
+            long: lM ? lM[1].trim() : 'No analysis.'
+        };
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.tab[data-tab="${horizon}"]`).classList.add('active');
+        renderAnalysis(fullAnalysis[horizon]);
+        resultSection.style.display = 'block';
+
+    } catch (err) {
+        errorMsg.textContent = err.message;
+        errorMsg.style.display = 'block';
     }
 
     loading.style.display = 'none';
     analyzeBtn.disabled = false;
-    analyzeBtn.textContent = 'Analyze Stock';
-
-    if (!responseText) {
-        errorMsg.textContent = 'Analysis failed: ' + lastError;
-        errorMsg.style.display = 'block';
-        return;
-    }
-
-    try {
-        // Parse signal
-        const signalMatch = responseText.match(/SIGNAL:\s*(BUY|SELL|HOLD)/i);
-        const confMatch = responseText.match(/CONFIDENCE:\s*(\d+)/);
-        const nameMatch = responseText.match(/STOCK_NAME:\s*(.+)/);
-        const priceMatch = responseText.match(/CURRENT_PRICE:\s*(.+)/);
-
-        const signal = signalMatch ? signalMatch[1].toUpperCase() : 'HOLD';
-        const conf = confMatch ? confMatch[1] : '50';
-        const name = nameMatch ? nameMatch[1].trim() : symbol;
-        const price = priceMatch ? priceMatch[1].trim() : '';
-
-        signalBadge.textContent = signal;
-        signalBadge.className = 'signal-badge signal-' + signal.toLowerCase();
-        stockName.textContent = name;
-        stockPrice.textContent = price;
-        confValue.textContent = conf + '%';
-
-        // Parse indicators
-        const indSection = responseText.match(/INDICATORS:\n([\s\S]*?)(?=SHORT_TERM:)/);
-        indicatorsGrid.innerHTML = '';
-
-        if (indSection) {
-            const lines = indSection[1].trim().split('\n').filter(l => l.includes('|'));
-            lines.forEach(line => {
-                const parts = line.split('|');
-                const nameVal = parts[0].split(':');
-                const indName = nameVal[0].trim();
-                const indVal = nameVal[1] ? nameVal[1].trim() : '';
-                const indSignal = parts[1] ? parts[1].trim() : 'Neutral';
-
-                let signalClass = 'ind-neutral';
-                if (indSignal.toLowerCase().includes('bullish')) signalClass = 'ind-bullish';
-                if (indSignal.toLowerCase().includes('bearish')) signalClass = 'ind-bearish';
-
-                const div = document.createElement('div');
-                div.className = 'indicator';
-                div.innerHTML = `
-                    <div class="ind-name">${indName}</div>
-                    <div class="ind-value">${indVal}</div>
-                    <div class="ind-signal ${signalClass}">${indSignal}</div>
-                `;
-                indicatorsGrid.appendChild(div);
-            });
-        }
-
-        // Parse term analyses
-        const shortMatch = responseText.match(/SHORT_TERM:\n([\s\S]*?)(?=MEDIUM_TERM:)/);
-        const medMatch = responseText.match(/MEDIUM_TERM:\n([\s\S]*?)(?=LONG_TERM:)/);
-        const longMatch = responseText.match(/LONG_TERM:\n([\s\S]*?)$/);
-
-        fullAnalysis = {
-            short: shortMatch ? shortMatch[1].trim() : 'No short term analysis available.',
-            medium: medMatch ? medMatch[1].trim() : 'No medium term analysis available.',
-            long: longMatch ? longMatch[1].trim() : 'No long term analysis available.'
-        };
-
-        // Show selected horizon tab
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`.tab[data-tab="${horizon}"]`).classList.add('active');
-        renderAnalysis(fullAnalysis[horizon]);
-
-        resultSection.style.display = 'block';
-    } catch (err) {
-        errorMsg.textContent = 'Error parsing analysis: ' + err.message;
-        errorMsg.style.display = 'block';
-    }
+    analyzeBtn.textContent = 'Analyze THYAO';
 }
 
 analyzeBtn.addEventListener('click', analyze);
-
-symbolInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') analyze();
-});
